@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dokumentasi Ujian — Madin Ar Rohman Tegalrejo</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #10b981;
+      --border: rgba(255, 255, 255, 0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .box {
+      width: 100%;
+      max-width: 560px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+    }
+    .header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #a7f3d0;
+    }
+    .header p {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .content {
+      padding: 18px 20px;
+    }
+    .status {
+      font-size: 14px;
+      color: var(--muted);
+      text-align: center;
+      padding: 28px 12px;
+    }
+    .error {
+      color: #fca5a5;
+    }
+    .foto-wrap {
+      display: none;
+    }
+    .foto-wrap img {
+      width: 100%;
+      max-height: 70vh;
+      object-fit: contain;
+      border-radius: 12px;
+      background: #090d16;
+      border: 1px solid var(--border);
+    }
+    .meta {
+      margin-top: 14px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .meta strong {
+      color: #fde68a;
+    }
+    .actions {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      flex: 1;
+      text-align: center;
+      text-decoration: none;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #06281e;
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="header">
+      <h1>Dokumentasi Ujian Santri Putra</h1>
+      <p>Madrasah Diniyah Ar Rohman Tegalrejo</p>
+    </div>
+
+    <div class="content">
+      <div id="statusBox" class="status">Memuat foto dokumentasi...</div>
+
+      <div id="fotoWrap" class="foto-wrap">
+        <img id="fotoImg" alt="Foto Dokumentasi Ujian" />
+        <div id="metaBox" class="meta"></div>
+        <div class="actions">
+          <a id="downloadBtn" class="btn btn-primary" download="dokumentasi-ujian.jpg">Unduh Foto</a>
+          <a href="./index.html" class="btn btn-secondary">Kembali ke Absensi</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwmVrIEftwGUIwkue8AxhDs3e3w2-qoh1jDJfsZ3Ch4mpuuVX9SGvrudrK1IfmLlkx9/exec';
+
+    const params = new URLSearchParams(window.location.search);
+    const idLog = (params.get('id') || '').trim();
+
+    const statusBox = document.getElementById('statusBox');
+    const fotoWrap = document.getElementById('fotoWrap');
+    const fotoImg = document.getElementById('fotoImg');
+    const metaBox = document.getElementById('metaBox');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    async function muatDokumentasi() {
+      if (!idLog) {
+        statusBox.className = 'status error';
+        statusBox.textContent = 'ID log dokumentasi tidak ditemukan pada tautan.';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}?action=getFoto&id=${encodeURIComponent(idLog)}`);
+        const data = await res.json();
+
+        if (!data || !data.ok || !data.foto) {
+          statusBox.className = 'status error';
+          statusBox.textContent = data?.message || 'Foto dokumentasi tidak tersedia untuk log ini.';
+          return;
+        }
+
+        const srcFoto = data.foto.startsWith('data:image')
+          ? data.foto
+          : `data:image/jpeg;base64,${data.foto}`;
+
+        fotoImg.src = srcFoto;
+        downloadBtn.href = srcFoto;
+        downloadBtn.download = `dokumentasi-${idLog}.jpg`;
+
+        metaBox.innerHTML = `
+          <div><strong>ID Log:</strong> ${escapeHtml(idLog)}</div>
+          <div><strong>Ruang:</strong> ${escapeHtml(data.ruang || '-')}</div>
+          <div><strong>Jadwal:</strong> ${escapeHtml(data.idJadwal || '-')}</div>
+          <div><strong>Pengawas:</strong> ${escapeHtml(data.pengawas || '-')}</div>
+          <div><strong>Kondisi Ujian:</strong> ${escapeHtml(data.kondisi || '-')}</div>
+          <div><strong>Waktu Input:</strong> ${escapeHtml(data.timestamp || '-')}</div>
+        `;
+
+        statusBox.style.display = 'none';
+        fotoWrap.style.display = 'block';
+      } catch (err) {
+        statusBox.className = 'status error';
+        statusBox.textContent = 'Gagal memuat foto: ' + err.message;
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    muatDokumentasi();
+  </script>
+</body>
+</html>
