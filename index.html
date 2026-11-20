@@ -441,13 +441,27 @@
       document.getElementById('btnKirimWA').addEventListener('click', kirimRekapWA);
     }
 
+    function normalizeAppData(raw) {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('Respons server kosong atau tidak valid.');
+      }
+      if (parsed.ok === false) {
+        throw new Error(parsed.message || 'Server mengembalikan status gagal.');
+      }
+      return {
+        santri: Array.isArray(parsed.santri) ? parsed.santri : [],
+        jadwal: Array.isArray(parsed.jadwal) ? parsed.jadwal : [],
+        pengawas: Array.isArray(parsed.pengawas) ? parsed.pengawas : [],
+        logs: Array.isArray(parsed.logs) ? parsed.logs : []
+      };
+    }
+
     async function callServerGet(action, extraParams) {
       if (typeof google !== 'undefined' && google.script && google.script.run && action === 'getInitialData') {
         return new Promise(function(resolve, reject) {
           google.script.run
-            .withSuccessHandler(function(raw) {
-              resolve(typeof raw === 'string' ? JSON.parse(raw) : raw);
-            })
+            .withSuccessHandler(resolve)
             .withFailureHandler(reject)
             .getInitialData();
         });
@@ -461,16 +475,14 @@
         });
       }
       const res = await fetch(url.toString());
-      return await res.json();
+      return await res.text();
     }
 
     async function callServerPost(action, payloadObj) {
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         return new Promise(function(resolve, reject) {
           google.script.run
-            .withSuccessHandler(function(raw) {
-              resolve(typeof raw === 'string' ? JSON.parse(raw) : raw);
-            })
+            .withSuccessHandler(resolve)
             .withFailureHandler(reject)[action](JSON.stringify(payloadObj));
         });
       }
@@ -480,7 +492,7 @@
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: action, payload: payloadObj })
       });
-      return await res.json();
+      return await res.text();
     }
 
     function kompresFotoKeBase64(file, maxWidth, quality) {
@@ -572,7 +584,7 @@
       }
       if (hapusBtn) hapusBtn.style.display = 'none';
 
-      const existingLog = appData.logs.find(function(l) { return l.idJadwal === currentJadwalId && l.ruang === currentRuang; });
+      const existingLog = (appData.logs || []).find(function(l) { return l.idJadwal === currentJadwalId && l.ruang === currentRuang; });
       if (existingLog && existingLog.hasFoto) {
         statusEl.innerText = 'Foto dokumentasi sebelumnya sudah tersimpan di server (pilih foto baru jika ingin mengganti).';
       } else {
@@ -679,7 +691,8 @@
 
       showLoader('Menambahkan santri ke ' + ruang + '...');
       try {
-        appData = await callServerPost('addSantriBaru', { nama: nama, kelas: kelas, ruang: ruang });
+        const raw = await callServerPost('addSantriBaru', { nama: nama, kelas: kelas, ruang: ruang });
+        appData = normalizeAppData(raw);
         document.getElementById('newSantriNama').value = '';
         document.getElementById('addSantriPanel').classList.remove('open');
         selectRuang(ruang);
@@ -716,7 +729,8 @@
       }
 
       try {
-        appData = await callServerGet('getInitialData');
+        const raw = await callServerGet('getInitialData');
+        appData = normalizeAppData(raw);
         populateJadwal();
         populatePengawasDropdown();
 
@@ -750,7 +764,7 @@
     }
 
     function syncActiveRoomFromServer() {
-      const existingLog = appData.logs.find(function(l) { return l.idJadwal === currentJadwalId && l.ruang === currentRuang; });
+      const existingLog = (appData.logs || []).find(function(l) { return l.idJadwal === currentJadwalId && l.ruang === currentRuang; });
       const editBanner = document.getElementById('editModeBanner');
       const submitBtn = document.getElementById('btnSubmitAbsensi');
       const sectionTitle = document.getElementById('formSectionTitle');
@@ -782,7 +796,7 @@
       const sel = document.getElementById('selectJadwal');
       const prevVal = sel.value || currentJadwalId;
       sel.innerHTML = '';
-      appData.jadwal.forEach(function(j) {
+      (appData.jadwal || []).forEach(function(j) {
         const opt = document.createElement('option');
         opt.value = j.id;
         opt.textContent = j.hariTanggal;
@@ -795,7 +809,7 @@
       const sel = document.getElementById('selectPengawas');
       const prevVal = sel.value;
       sel.innerHTML = '<option value="">-- Pilih Ustadz Pengawas --</option>';
-      appData.pengawas.forEach(function(nama) {
+      (appData.pengawas || []).forEach(function(nama) {
         const opt = document.createElement('option');
         opt.value = nama;
         opt.textContent = nama;
@@ -807,7 +821,7 @@
     function onJadwalChange() {
       isFormDirty = false;
       currentJadwalId = document.getElementById('selectJadwal').value;
-      const j = appData.jadwal.find(function(item) { return item.id === currentJadwalId; });
+      const j = (appData.jadwal || []).find(function(item) { return item.id === currentJadwalId; });
       const sessionBanner = document.getElementById('sessionBanner');
       const grid = document.getElementById('mapelGrid');
       sessionBanner.innerHTML = '';
@@ -858,7 +872,7 @@
     }
 
     function getPesertaRuang(ruang) {
-      return appData.santri.filter(function(s) { return s.ruang === ruang; });
+      return (appData.santri || []).filter(function(s) { return s.ruang === ruang; });
     }
 
     function renderRoomMonitor() {
@@ -867,7 +881,7 @@
       let completedCount = 0;
 
       DAFTAR_RUANG.forEach(function(ruang) {
-        const log = appData.logs.find(function(l) { return l.idJadwal === currentJadwalId && l.ruang === ruang; });
+        const log = (appData.logs || []).find(function(l) { return l.idJadwal === currentJadwalId && l.ruang === ruang; });
         const isDone = !!log;
         if (isDone) completedCount++;
 
@@ -952,7 +966,7 @@
         return;
       }
 
-      const santriObj = appData.santri.find(function(s) { return s.noPeserta === noPeserta; });
+      const santriObj = (appData.santri || []).find(function(s) { return s.noPeserta === noPeserta; });
       if (!santriObj) return;
 
       isFormDirty = true;
@@ -1024,7 +1038,8 @@
 
       showLoader('Menyimpan laporan ' + currentRuang + '...');
       try {
-        appData = await callServerPost('saveAbsensiRuang', payloadObj);
+        const raw = await callServerPost('saveAbsensiRuang', payloadObj);
+        appData = normalizeAppData(raw);
         isFormDirty = false;
         currentFotoBase64 = '';
         selectRuang(currentRuang);
@@ -1042,7 +1057,7 @@
       const info = document.getElementById('waGateStatusText');
 
       const missingRooms = DAFTAR_RUANG.filter(function(r) {
-        return !appData.logs.some(function(l) { return l.idJadwal === currentJadwalId && l.ruang === r; });
+        return !(appData.logs || []).some(function(l) { return l.idJadwal === currentJadwalId && l.ruang === r; });
       });
 
       if (missingRooms.length === 0) {
@@ -1059,7 +1074,7 @@
     }
 
     function kirimRekapWA() {
-      const j = appData.jadwal.find(function(item) { return item.id === currentJadwalId; });
+      const j = (appData.jadwal || []).find(function(item) { return item.id === currentJadwalId; });
       if (!j) return;
 
       let totalSemua = 0;
@@ -1070,7 +1085,7 @@
       let daftarLinkFotoText = '';
 
       DAFTAR_RUANG.forEach(function(ruang) {
-        const log = appData.logs.find(function(l) { return l.idJadwal === currentJadwalId && l.ruang === ruang; });
+        const log = (appData.logs || []).find(function(l) { return l.idJadwal === currentJadwalId && l.ruang === ruang; });
         if (log) {
           totalSemua += log.totalPeserta;
           totalHadir += log.hadir;
